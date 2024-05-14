@@ -1,16 +1,22 @@
 using UnityEngine;
 
+[DisallowMultipleComponent]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(TrailRenderer))]
 public class Boid : MonoBehaviour
 {
-    private Neighborhood neighborhood;
-    private new Rigidbody rigidbody;
+    private Rigidbody _rb;
+    private Neighborhood _neighborhood;
 
     private void Awake()
     {
-        neighborhood = GetComponent<Neighborhood>();
-        rigidbody = GetComponent<Rigidbody>();
+        _rb = GetComponent<Rigidbody>();
+        _neighborhood = GetComponent<Neighborhood>();
+    }
 
-        Velocity = Random.onUnitSphere * Spawner.Settings.velocity;
+    private void Start()
+    {
+        Velocity = Random.onUnitSphere * Spawner.Instance.Settings.velocity;
 
         LookAhead();
         Colorize();
@@ -18,86 +24,64 @@ public class Boid : MonoBehaviour
 
     private void FixedUpdate()
     {
-        BoidSettings settings = Spawner.Settings;
-
-        Vector3 sumVelocity = Vector3.zero;
+        var settings = Spawner.Instance.Settings;
+        var sum = Vector3.zero;
 
         // ___ATTRACTOR___
-        Vector3 delta = Attractor.Position - Position;
+        var delta = Attractor.Instance.Position - Position;
         if (delta.magnitude > settings.attractPushDistance)
-        {
-            sumVelocity += delta.normalized * settings.attractPull;
-        }
+            sum += delta.normalized * settings.attractorPull;
         else
-        {
-            sumVelocity -= delta.normalized * settings.attractPush;
-        }
+            sum -= delta.normalized * settings.attractorPush;
 
         // ___COLLISION AVOIDANCE___
-        if (neighborhood.AverageNearPosition != Vector3.zero)
+        if (_neighborhood.AverageNearPosition != Vector3.zero)
         {
-            Vector3 avoidVelocity = Position - neighborhood.AverageNearPosition;
-            avoidVelocity.Normalize();
-            sumVelocity += avoidVelocity * settings.nearAvoid;
+            var avoid = Position - _neighborhood.AverageNearPosition;
+            sum += avoid.normalized * settings.collisionAvoidance;
         }
 
         // ___VELOCITY MATCHING___
-        if (neighborhood.AverageVelocity != Vector3.zero)
-        {
-            Vector3 alignVelocity = neighborhood.AverageVelocity;
-            alignVelocity.Normalize();
-            sumVelocity += alignVelocity * settings.velMatching;
-        }
+        if (_neighborhood.AverageVelocity != Vector3.zero)
+            sum += _neighborhood.AverageVelocity.normalized * settings.velocityMatching;
 
         // ___FLOCK CENTERING___
-        if (neighborhood.AveragePosition != Vector3.zero)
-        {
-            Vector3 centerVelocity = neighborhood.AveragePosition -
-                transform.position;
-            centerVelocity.Normalize();
-            sumVelocity += centerVelocity * settings.flockCentering;
-        }
+        if (_neighborhood.AveragePosition != Vector3.zero)
+            sum += Vector3.Normalize(_neighborhood.AveragePosition - Position) * settings.flockCentering;
 
         // ___INTERPOLATE VELOCITY___
-        sumVelocity.Normalize();
-        Velocity = Vector3.Lerp(Velocity.normalized, sumVelocity,
-            settings.velocityEasing);
-        Velocity *= settings.velocity;
+        Velocity = Vector3.Lerp(Velocity.normalized, sum.normalized, settings.maxSteerForce) * settings.velocity;
 
         LookAhead();
     }
 
-    void LookAhead()
+    private void LookAhead()
     {
-        transform.LookAt(Position + rigidbody.velocity);
+        transform.LookAt(Position + Velocity);
     }
 
-    void Colorize()
+    private void Colorize()
     {
-        Color color = Random.ColorHSV(0, 1, 0.5f, 1, 0.5f, 1);
+        var color = Random.ColorHSV(0, 1, 0.5f, 1, 0.5f, 1);
 
-        Renderer[] renderers = gameObject.GetComponentsInChildren<Renderer>();
-        foreach (Renderer renderer in renderers)
+        var renderers = GetComponentsInChildren<Renderer>();
+        foreach (var r in renderers)
         {
-            renderer.material.color = color;
+            r.material.color = color;
         }
 
-        TrailRenderer trailRenderer = GetComponent<TrailRenderer>();
-        trailRenderer.startColor = color;
-        color.a = 0;
-        trailRenderer.endColor = color;
-        trailRenderer.endWidth = 0;
+        var trail = GetComponent<TrailRenderer>();
+        trail.startColor = color;
+        color.a = 0f;
+        trail.endColor = color;
+        trail.endWidth = 0f;
     }
 
-    public Vector3 Position
-    {
-        get { return transform.position; }
-        private set { transform.position = value; }
-    }
+    public Vector3 Position => transform.position;
 
     public Vector3 Velocity
     {
-        get { return rigidbody.velocity; }
-        private set { rigidbody.velocity = value; }
+        get => _rb.velocity;
+        private set => _rb.velocity = value;
     }
 }

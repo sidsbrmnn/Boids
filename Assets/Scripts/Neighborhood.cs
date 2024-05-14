@@ -1,103 +1,61 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
+[DisallowMultipleComponent]
+[RequireComponent(typeof(SphereCollider))]
 public class Neighborhood : MonoBehaviour
 {
-    [Header("Dynamic")]
-    public List<Boid> neighbors;
-    private SphereCollider sphereCollider;
+    private SphereCollider _collider;
+    private List<Boid> _neighbors;
+
+    private void Awake()
+    {
+        _collider = GetComponent<SphereCollider>();
+        _neighbors = new List<Boid>();
+    }
 
     private void Start()
     {
-        neighbors = new();
-        sphereCollider = GetComponent<SphereCollider>();
-        sphereCollider.radius = Spawner.Settings.neighborDistance / 2;
+        _collider.radius = Spawner.Instance.Settings.neighborDistance * 0.5f;
     }
 
     private void FixedUpdate()
     {
-        float nearRadius = Spawner.Settings.neighborDistance / 2;
-        if (!Mathf.Approximately(sphereCollider.radius, nearRadius))
-        {
-            sphereCollider.radius = nearRadius;
-        }
+        var radius = Spawner.Instance.Settings.neighborDistance * 0.5f;
+        if (Mathf.Approximately(_collider.radius, radius))
+            _collider.radius = radius;
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.TryGetComponent<Boid>(out var boid))
-        {
-            if (!neighbors.Contains(boid))
-            {
-                neighbors.Add(boid);
-            }
-        }
+        if (!other.TryGetComponent(out Boid b)) return;
+        if (!_neighbors.Contains(b)) _neighbors.Add(b);
     }
 
     private void OnTriggerExit(Collider other)
     {
-        if (other.TryGetComponent<Boid>(out var boid))
-        {
-            neighbors.Remove(boid);
-        }
+        if (other.TryGetComponent(out Boid b)) _neighbors.Remove(b);
     }
 
-    public Vector3 AveragePosition
-    {
-        get
-        {
-            Vector3 average = Vector3.zero;
-            foreach (Boid boid in neighbors)
-            {
-                average += boid.Position;
-            }
-            if (neighbors.Count > 0)
-            {
-                average /= neighbors.Count;
-            }
+    public Vector3 AveragePosition => _neighbors.Count == 0
+        ? Vector3.zero
+        : _neighbors.Select(b => b.Position).Aggregate((acc, p) => acc + p) / _neighbors.Count;
 
-            return average;
-        }
-    }
-
-    public Vector3 AverageVelocity
-    {
-        get
-        {
-            Vector3 average = Vector3.zero;
-            foreach (Boid boid in neighbors)
-            {
-                average += boid.Velocity;
-            }
-            if (neighbors.Count > 0)
-            {
-                average /= neighbors.Count;
-            }
-
-            return average;
-        }
-    }
+    public Vector3 AverageVelocity => _neighbors.Count == 0
+        ? Vector3.zero
+        : _neighbors.Select(b => b.Velocity).Aggregate((acc, v) => acc + v) / _neighbors.Count;
 
     public Vector3 AverageNearPosition
     {
         get
         {
-            Vector3 average = Vector3.zero;
-            int count = 0;
-            foreach (Boid boid in neighbors)
-            {
-                Vector3 delta = boid.Position - transform.position;
-                if (delta.magnitude <= Spawner.Settings.nearDistance) {
-                    average += boid.Position;
-                    count++;
-                }
-            }
-            if (count > 0)
-            {
-                average /= count;
-            }
+            var near = _neighbors.Where(b =>
+                Vector3.Distance(b.Position, transform.position) <= Spawner.Instance.Settings.nearDistance).ToList();
 
-            return average;
+            return near.Count == 0
+                ? Vector3.zero
+                : near.Select(b => b.Position).Aggregate((acc, p) => acc + p) / near.Count;
         }
     }
 }
